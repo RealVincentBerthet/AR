@@ -4,3 +4,11 @@ Liens utiles :
 
 AR en python avec opencv, sift et homography
 https://bitesofcode.wordpress.com/2017/09/12/augmented-reality-with-python-and-opencv-part-1/
+
+
+Un code src avec un petit cpp https://github.com/quantyle/augmented-reality-opencv
+sa video :  https://www.youtube.com/watch?v=yNvmfDJDXFM
+
+Un mec qui explique vite zef et qui donne un tuto au debut 
+https://stackoverflow.com/questions/12283675/augmented-reality-sdk-with-opencv
+
