@@ -13,3 +13,6 @@ Un mec qui explique vite zef et qui donne un tuto au debut
 https://stackoverflow.com/questions/12283675/augmented-reality-sdk-with-opencv
 le tuto en question :  https://dsynflo.blogspot.com/2010/06/simplar-augmented-reality-for-opencv.html
 
+Une version matlab qui marche bien
+https://www.youtube.com/watch?v=JIh_rE1IcQc
+
