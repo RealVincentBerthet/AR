@@ -18,4 +18,4 @@ https://www.youtube.com/watch?v=JIh_rE1IcQc
 mais le code de la page existe plus
 
 Un mec qui utilise opencv for unity
-https://github.com/MasteringOpenCV/code/tree/master/Chapter3_MarkerlessAR
+https://github.com/MasteringOpenCV/code
