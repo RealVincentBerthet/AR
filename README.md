@@ -16,3 +16,6 @@ le tuto en question :  https://dsynflo.blogspot.com/2010/06/simplar-augmented-re
 Une version matlab qui marche bien
 https://www.youtube.com/watch?v=JIh_rE1IcQc
 mais le code de la page existe plus
+
+Un mec qui utilise opencv for unity
+https://github.com/MasteringOpenCV/code
