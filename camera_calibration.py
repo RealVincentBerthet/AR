@@ -14,8 +14,7 @@ objp[:, :2] = np.mgrid[0:rows, 0:cols].T.reshape(-1, 2)
 # Create the arrays to store the object points and the image points
 objpoints = []
 imgpoints = []
-
-images = glob.glob('./calibration/left/*.jpg')
+images = glob.glob('./calibration/huawei_p30/*.jpg')
 for fname in images:
     # Load the image and convert it to gray scale
     img = cv.imread(fname)

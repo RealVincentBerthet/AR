@@ -18,16 +18,19 @@ def draw(img, corners, imgpts):
     return img
 
 def main():
+    # Define the chess board rows and columns
+    rows = 7
+    cols = 6
     criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
-    objp = np.zeros((6*7,3), np.float32)
-    objp[:,:2] = np.mgrid[0:7,0:6].T.reshape(-1,2)
+    objp = np.zeros((rows * cols, 3), np.float32)
+    objp[:, :2] = np.mgrid[0:rows, 0:cols].T.reshape(-1, 2)
     axis = np.float32([[0,0,0], [0,3,0], [3,3,0], [3,0,0],
                     [0,0,-3],[0,3,-3],[3,3,-3],[3,0,-3] ])
 
     for fname in glob.glob('./calibration/left/left*.jpg'):
         img = cv.imread(fname)
         gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
-        ret, corners = cv.findChessboardCorners(gray, (7,6),None)
+        ret, corners = cv.findChessboardCorners(gray, (rows,cols),None)
         if ret == True:
             corners2 = cv.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
             # Find the rotation and translation vectors.
