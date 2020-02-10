@@ -2,6 +2,20 @@ import numpy as np
 import cv2 as cv
 import glob
 import yaml
+import argparse
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f","--filename", help="calibration directory path")
+    args = parser.parse_args()
+
+    if args.filename != None:
+        print("Directory Loaded : "+str(args.filename))
+    else:
+        print("No directory loaded used -f argurment")
+        quit()
+
+    return args.filename
 
 # Define the chess board rows and columns
 rows = 7
@@ -14,7 +28,8 @@ objp[:, :2] = np.mgrid[0:rows, 0:cols].T.reshape(-1, 2)
 # Create the arrays to store the object points and the image points
 objpoints = []
 imgpoints = []
-images = glob.glob('./calibration/huawei_p30/*.jpg')
+platform=get_args()
+images = glob.glob(str(platform)+'/*.jpg')
 for fname in images:
     # Load the image and convert it to gray scale
     img = cv.imread(fname)
@@ -35,7 +50,7 @@ cv.destroyAllWindows()
 
 # Calibrate the camera and save the results
 ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
-np.savez('./calibration.npz', mtx=mtx, dist=dist, rvecs=rvecs, tvecs=tvecs)
+np.savez(str(platform)+'calibration.npz', mtx=mtx, dist=dist, rvecs=rvecs, tvecs=tvecs)
 #fname = "calibration.yml"
 #with open(fname, "w") as f:
 #    yaml.dump(ret, f)
