@@ -1,10 +1,20 @@
 import numpy as np
 import cv2 as cv
 import glob
+import argparse
 
-# Load previously saved data
-with np.load('calibration.npz') as X:
-    mtx, dist, _, _ = [X[i] for i in ('mtx','dist','rvecs','tvecs')]
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f","--filename", help="calibration directory path")
+    args = parser.parse_args()
+
+    if args.filename != None:
+        print("Directory Loaded : "+str(args.filename))
+    else:
+        print("No directory loaded used -f argurment")
+        quit()
+
+    return args.filename
 
 def draw(img, corners, imgpts):
     imgpts = np.int32(imgpts).reshape(-1,2)
@@ -18,6 +28,11 @@ def draw(img, corners, imgpts):
     return img
 
 def main():
+    calibration_dir=get_args()
+    # Load previously saved data
+    with np.load(str(calibration_dir)+'/calibration.npz') as X:
+        mtx, dist, _, _ = [X[i] for i in ('mtx','dist','rvecs','tvecs')]
+
     # Define the chess board rows and columns
     rows = 7
     cols = 6
@@ -27,7 +42,7 @@ def main():
     axis = np.float32([[0,0,0], [0,3,0], [3,3,0], [3,0,0],
                     [0,0,-3],[0,3,-3],[3,3,-3],[3,0,-3] ])
 
-    for fname in glob.glob('./calibration/left/left*.jpg'):
+    for fname in glob.glob(str(calibration_dir)+'*.jpg'):
         img = cv.imread(fname)
         gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
         ret, corners = cv.findChessboardCorners(gray, (rows,cols),None)
