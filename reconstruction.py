@@ -42,7 +42,7 @@ def main():
     axis = np.float32([[0,0,0], [0,3,0], [3,3,0], [3,0,0],
                     [0,0,-3],[0,3,-3],[3,3,-3],[3,0,-3] ])
 
-    for fname in glob.glob(str(calibration_dir)+'*.jpg'):
+    for fname in glob.glob(str(calibration_dir)+'/*.jpg'):
         img = cv.imread(fname)
         gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
         ret, corners = cv.findChessboardCorners(gray, (rows,cols),None)

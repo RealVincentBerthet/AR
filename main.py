@@ -17,28 +17,25 @@ def get_args():
 
 
 def main():
-    # Initialization
+    #region Initialization
     calibration_file=get_args()
 
-    # Load previously calibration saved
+    # Load calibration saved
     with np.load(str(calibration_file)) as X:
         mtx, dist, _, _ = [X[i] for i in ('mtx','dist','rvecs','tvecs')]
 
-    #homography = None 
-    # matrix of camera parameters (made up but works quite well for me) 
-    #camera_parameters = np.array([[800, 0, 320], [0, 800, 240], [0, 0, 1]])
-    # create ORB keypoint detector
-    #orb = cv.ORB_create()
-    # create BFMatcher object based on hamming distance  
-    #bf = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
-    # load the reference surface that will be searched in the video stream
-    #dir_name = os.getcwd()
-    #model = cv.imread(os.path.join(dir_name, 'reference/detail.png'), 0)
-    # Compute model keypoints and its descriptors
-    #kp_model, des_model = orb.detectAndCompute(model, None)
-    # Load 3D model from OBJ file
-    #obj = OBJ(os.path.join(dir_name, 'models/Pikachu.obj'), swapyz=True) 
-
+    
+    # Descriptor features
+    orb = cv.ORB_create()
+    # find the keypoints and compute descriptor with ORB
+    marker=cv.imread('markers/fiducial.png',1)
+    #marker = cv.cvtColor(marker,cv.COLOR_BGR2GRAY)
+    kp_marker, des_marker = orb.detectAndCompute(marker, None) 
+    marker2=np.array(marker)
+    # draw only keypoints location,not size and orientation
+    cv.drawKeypoints(marker,kp_marker,marker2,color=(0,255,0), flags=0)
+    cv.imshow("Marker",marker2)
+    #endregion
 
     cap = cv.VideoCapture(0)
     while(True):
@@ -46,15 +43,15 @@ def main():
         ret, frame = cap.read()
         if not ret:
             print("Unable to capture video")
-            return 
-
+            return        
+        
         # Display the resulting frame
-        cv.imshow('frame',frame)
+        cv.imshow('Camera',frame)
         if cv.waitKey(1) & 0xFF == ord('q'):
             break
 
-        # Descriptor features
-        
+        # Pose Estimation
+        #@TODO use mtx & co + papier prof   cv find homography     
 
 
 
