@@ -1,21 +1,21 @@
 import numpy as np
 import cv2 as cv
 import glob
-import yaml
+#import yaml
 import argparse
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f","--filename", help="calibration directory path")
+    parser.add_argument("-d","--directory", help="calibration directory path")
     args = parser.parse_args()
 
-    if args.filename != None:
-        print("Directory Loaded : "+str(args.filename))
+    if args.directory != None:
+        print("Directory Loaded : "+str(args.directory))
     else:
-        print("No directory loaded used -f argurment")
+        print("No directory loaded used -d argurment")
         quit()
 
-    return args.filename
+    return args.directory
 
 # Define the chess board rows and columns
 rows = 7
@@ -33,6 +33,7 @@ images = glob.glob(str(platform)+'/*.jpg')
 for fname in images:
     # Load the image and convert it to gray scale
     img = cv.imread(fname)
+    img = cv.resize(img,(640,480))
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
     # Find the chess board corners
@@ -65,17 +66,17 @@ for i in range(len(objpoints)):
 print("Total error: ", error / len(objpoints))
 
 # Load one of the test images
-img = cv.imread(images[0])
+img2 = cv.imread(images[0])
+img2 = cv.resize(img2,(img.shape[1],img.shape[0]))
 h, w = img.shape[:2]
 
 # Obtain the new camera matrix and undistort the image
 newCameraMtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
-undistortedImg = cv.undistort(img, mtx, dist, None, newCameraMtx)
-
+undistortedImg = cv.undistort(img2, mtx, dist, None, newCameraMtx)
 # x, y, w, h = roi
 # undistortedImg = undistortedImg[y:y+h, x:x+w]
 # cv.imwrite('calibresult.png', undistortedImg)
 
 # Display the final result
-cv.imshow('chess', np.hstack((img, undistortedImg)))
+cv.imshow('chess', np.hstack((img2, undistortedImg)))
 cv.waitKey(0)

@@ -5,16 +5,16 @@ import argparse
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f","--filename", help="calibration directory path")
+    parser.add_argument("-d","--directory", help="directory path")
     args = parser.parse_args()
 
-    if args.filename != None:
-        print("Directory Loaded : "+str(args.filename))
+    if args.directory != None:
+        print("Directory Loaded : "+str(args.directory))
     else:
-        print("No directory loaded used -f argurment")
+        print("No directory loaded used -d argurment")
         quit()
 
-    return args.filename
+    return args.directory
 
 def draw(img, corners, imgpts):
     imgpts = np.int32(imgpts).reshape(-1,2)
@@ -44,11 +44,13 @@ def main():
 
     for fname in glob.glob(str(calibration_dir)+'/*.jpg'):
         img = cv.imread(fname)
+        img = cv.resize(img,(512,512))
         gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
         ret, corners = cv.findChessboardCorners(gray, (rows,cols),None)
         if ret == True:
             corners2 = cv.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
             # Find the rotation and translation vectors.
+            print(str(objp.shape)+', '+str(corners2.shape))
             ret,rvecs, tvecs = cv.solvePnP(objp, corners2, mtx, dist)
             # project 3D points to image plane
             imgpts, jac = cv.projectPoints(axis, rvecs, tvecs, mtx, dist)

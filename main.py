@@ -1,65 +1,88 @@
 import numpy as np
 import cv2 as cv
 import argparse
+import ARTools
+from ARTools import *
 
-def get_args():
+def get_args(calibration,marker,minMatches,maxMatches,video):
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f","--calibration", help="calibration file")
+    parser.add_argument('-c','--calibration', help='calibration filepath')
+    parser.add_argument('-m','--marker', help='marker image path')
+    parser.add_argument('-min','--minmatches', help='min matches')
+    parser.add_argument('-max','--maxmatches', help='max matches')
+    parser.add_argument('-v','--video',help='video path')
+    parser.add_argument('-r','--real',help='play video at fps rate in real time',action='store_true')
     args = parser.parse_args()
 
-    if args.calibration != None:
-        print("Calibration Loaded : "+str(args.calibration))
-    else:
-        print("No calibration loaded used -c argurment")
-        quit()
-
-    return args.calibration
-
+    if args.calibration != None :
+        calibration=str(args.calibration)
+    if args.marker != None :
+        marker=str(args.marker)
+    if args.minmatches != None :
+        minMatches=int(args.minmatches)
+    if args.maxmatches != None :
+        maxMatches=int(args.maxmatches)
+    if args.video != None :
+        video=str(args.video)
+    
+    return calibration,marker,minMatches,maxMatches,video,not(args.real)
 
 def main():
     #region Initialization
-    calibration_file=get_args()
+    video=0 #0 to use camera
+    calibration_file='./videos/genius_F100/calibration/calibration.npz'
+    marker_file='./markers/natural.png'
+    minMatches=5
+    maxMatches=20
+    calibration_file,marker_file,minMatches,maxMatches,video,realMode=get_args(calibration_file,marker_file,minMatches,maxMatches,video)
+    moveWindows=True
 
-    # Load calibration saved
-    with np.load(str(calibration_file)) as X:
-        mtx, dist, _, _ = [X[i] for i in ('mtx','dist','rvecs','tvecs')]
-
-    
-    # Descriptor features
-    orb = cv.ORB_create()
-    # find the keypoints and compute descriptor with ORB
-    marker=cv.imread('markers/fiducial.png',1)
-    #marker = cv.cvtColor(marker,cv.COLOR_BGR2GRAY)
-    kp_marker, des_marker = orb.detectAndCompute(marker, None) 
-    marker2=np.array(marker)
-    # draw only keypoints location,not size and orientation
-    cv.drawKeypoints(marker,kp_marker,marker2,color=(0,255,0), flags=0)
-    cv.imshow("Marker",marker2)
+    # ARPipeline
+    pipeline=ARPipeline(video=video,realMode=realMode)
+    pipeline.LoadCamCalibration(calibration_file)
+    pipeline.LoadMarker(marker_file)
+    pikachu=OBJ('./models/Pikachu.obj', swapyz=True)  
     #endregion
-
-    cap = cv.VideoCapture(0)
-    while(True):
-        # Capture frame-by-frame
-        ret, frame = cap.read()
-        if not ret:
-            print("Unable to capture video")
-            return        
+    
+    while(True): 
+        frame=pipeline.GetFrame()
+       
+        matches,frame_kp=pipeline.ComputeMatches(frame)
+        homography,_=pipeline.ComputeHomography(matches,frame_kp,minMatches=minMatches)
         
-        # Display the resulting frame
-        cv.imshow('Camera',frame)
-        if cv.waitKey(1) & 0xFF == ord('q'):
-            break
+        matches_refined=pipeline.RefineMatches(matches,frame_kp,minMatches=minMatches)
+        homography_refined,_=pipeline.ComputeHomography(matches_refined,frame_kp,minMatches=minMatches)
+       
+        warped,homography_warped=pipeline.WarpMarker(frame,homography_refined,minMatches=minMatches)
+        rvecs, tvecs=pipeline.ComputePose(frame,homography_warped) #@TODO pnp bug chelou sur la position
 
-        # Pose Estimation
-        #@TODO use mtx & co + papier prof   cv find homography     
+        #cv.imshow('CubeTest',ARTools.Draw3DCube(frame,rvecs,tvecs,pipeline.cam)) #@TODO pnp bug chelou sur la position
+        #region Rendering
+        ar=frame.copy()
+        ar=pipeline.renderer.Draw2DRectangle(ar,homography,color=(255,0,0))
+        ar=pipeline.renderer.Draw2DRectangle(ar,homography_refined,color=(0,255,0))
+        ar=pipeline.renderer.Draw2DRectangle(ar,homography_warped,color=(0,0,255))
+        ar=pipeline.renderer.DrawObjHomography(ar,homography_warped,pikachu)
 
+        cv.imshow('AR Camera',ar)
+        cv.imshow('Keypoints',pipeline.renderer.DrawKeypoints(frame,frame_kp))
+        img_matches=pipeline.renderer.DrawMatches(frame,frame_kp,matches,maxMatches=maxMatches)
+        img_matches = cv.resize(img_matches,(frame.shape[1],frame.shape[0]))
+        cv.imshow('Matches',img_matches)
+        img_matches_refined=pipeline.renderer.DrawMatches(frame,frame_kp,matches_refined,maxMatches=maxMatches)
+        img_matches_refined = cv.resize(img_matches_refined,(frame.shape[1],frame.shape[0]))
+        cv.imshow('Matches refined',img_matches_refined)
+        cv.imshow('Find Marker',warped)
 
-
-
-
-    # When everything done, release the capture
-    cap.release()
-    cv.destroyAllWindows()
+        if moveWindows==True :
+            # init position windows once
+            cv.moveWindow('AR Camera',0,0)
+            cv.moveWindow('Keypoints',frame.shape[1],0)
+            cv.moveWindow('Matches',2*frame.shape[1],0)
+            cv.moveWindow('Matches refined',2*frame.shape[1],frame.shape[0])
+            cv.moveWindow('Find Marker',frame.shape[1],frame.shape[0])
+            moveWindows=False
+        #endregion
 
 if __name__ == '__main__':
     main()
