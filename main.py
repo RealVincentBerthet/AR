@@ -41,7 +41,7 @@ def main():
     pipeline=ARPipeline(video=video,realMode=realMode)
     pipeline.LoadCamCalibration(calibration_file)
     pipeline.LoadMarker(marker_file)
-    pikachu=OBJ('./models/wolf.obj', swapyz=True)  
+    model=OBJ('./models/wolf.obj', swapyz=True)  
     #endregion
     
     while(True): 
@@ -58,10 +58,10 @@ def main():
 
         #region Rendering
         ar=frame.copy()
-        ar=pipeline.renderer.Draw2DRectangle(ar,homography,color=(255,0,0))
-        ar=pipeline.renderer.Draw2DRectangle(ar,homography_refined,color=(0,255,0))
+        #ar=pipeline.renderer.Draw2DRectangle(ar,homography,color=(255,0,0))
+        #ar=pipeline.renderer.Draw2DRectangle(ar,homography_refined,color=(0,255,0))
         ar=pipeline.renderer.Draw2DRectangle(ar,homography_warped,color=(0,0,255))
-        ar=pipeline.renderer.DrawObj(ar,homography_warped,pikachu,eye=0.6)
+        ar=pipeline.renderer.DrawObj(ar,homography_warped,model,eye=0.4)
 
         cv.imshow('AR Camera',ar)
         cv.imshow('Keypoints',pipeline.renderer.DrawKeypoints(frame,frame_kp))
