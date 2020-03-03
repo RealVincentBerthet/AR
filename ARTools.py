@@ -16,20 +16,44 @@ class Struct(object):
         setattr(self, name, None)
 
 class FrameTracking:
-    def __init__(self,n=15):
+    def __init__(self,n=10,popTreshold=5):
         self.n=n
         self.frames=[]
+        self.pop=0
+        self.popTreshold=popTreshold
 
     def Add(self,object):
         if len(self.frames)==self.n :
             self.frames.pop()
         self.frames.insert(0,object)
     
+    def Pop(self):
+        res=None
+        if len(self.frames)>0 :
+            res=self.frames.pop(0)
+            self.pop=self.pop+1
+            if self.pop<=self.popTreshold :
+                self.Clear()
+
+        return res
+
+    def Mean(self):
+        res=None
+        if len(self.frames) > 0 :
+            res=self.frames[0]
+
+        for f in range(1,len(self.frames)) :
+            res=res*f
+
+        #print(str(len(self.frames))+' : '+str(self.frames[0]-res))
+        return res
+
     def Clear(self):
         self.frames=[]
 
 class Renderer:
     def __init__(self,pipeline):
+        self.pipeline=pipeline
         self.cam=pipeline.cam
         self.marker=pipeline.marker
     
@@ -59,26 +83,34 @@ class Renderer:
         
     def DrawObj(self,img, homography,obj,color=(255,255,255),line=True,eye=1):
         if homography is not None :
-            projection=self.ComputeProjectionMatrix(homography)
-            vertices = obj.vertices
-            scale_matrix = np.eye(3) * eye
-            h = self.marker.img.shape[0]
-            w = self.marker.img.shape[1]
+            self.pipeline.tracker.Add(homography)
+        else :
+            self.pipeline.tracker.Pop()
 
-            for face in obj.faces:
-                face_vertices = face[0]
-                points = np.array([vertices[vertex - 1] for vertex in face_vertices])
-                points = np.dot(points, scale_matrix)
-                # render marker in the middle of the reference surface. To do so,
-                # marker points must be displaced
-                points = np.array([[p[0] + w / 2, p[1] + h / 2, p[2]] for p in points])
-                dst = cv.perspectiveTransform(points.reshape(-1, 1, 3), projection)
-                imgpts = np.int32(dst)
+        homography=self.pipeline.tracker.Mean()
+        if homography is None :
+            return img
 
-                if line == True :
-                    img = cv.polylines(img, [imgpts], True, color, 1, cv.LINE_AA)
-                else :
-                    cv.fillConvexPoly(img, imgpts, (0, 0, 255),lineType=4)
+        projection=self.ComputeProjectionMatrix(homography)
+        vertices = obj.vertices
+        scale_matrix = np.eye(3) * eye
+        h = self.marker.img.shape[0]
+        w = self.marker.img.shape[1]
+
+        for face in obj.faces:
+            face_vertices = face[0]
+            points = np.array([vertices[vertex - 1] for vertex in face_vertices])
+            points = np.dot(points, scale_matrix)
+            # render marker in the middle of the reference surface. To do so,
+            # marker points must be displaced
+            points = np.array([[p[0] + w / 2, p[1] + h / 2, p[2]] for p in points])
+            dst = cv.perspectiveTransform(points.reshape(-1, 1, 3), projection)
+            imgpts = np.int32(dst)
+
+            if line == True :
+                img = cv.polylines(img, [imgpts], True, color, 1, cv.LINE_AA)
+            else :
+                cv.fillConvexPoly(img, imgpts, (0, 0, 255),lineType=4)
 
         return img
 
@@ -147,6 +179,7 @@ class ARPipeline:
     def __init__(self,escapeKey='q',width=640,height=480,video=0,loop=True,realMode=False):
         self.cam=Struct()
         self.marker=Struct()
+        self.tracker=FrameTracking()
         self.escapeKey=escapeKey
         self.cam.width=width
         self.cam.height=height

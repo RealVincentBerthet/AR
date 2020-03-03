@@ -60,7 +60,7 @@ def main():
         ar=frame.copy()
         #ar=pipeline.renderer.Draw2DRectangle(ar,homography,color=(255,0,0))
         #ar=pipeline.renderer.Draw2DRectangle(ar,homography_refined,color=(0,255,0))
-        ar=pipeline.renderer.Draw2DRectangle(ar,homography_warped,color=(0,0,255))
+        #ar=pipeline.renderer.Draw2DRectangle(ar,homography_warped,color=(0,0,255))
         ar=pipeline.renderer.DrawObj(ar,homography_warped,model,eye=0.4)
 
         cv.imshow('AR Camera',ar)
