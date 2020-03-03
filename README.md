@@ -38,6 +38,11 @@ optim :
 
 Liens utiles : 
 
+https://docs.opencv.org/master/d9/dab/tutorial_homography.html#tutorial_homography_Demo1
+
+
+https://books.google.fr/books?id=kYdgCgAAQBAJ&pg=PA176&lpg=PA176&dq=perspectiveTransform+opencv+homography+augmented&source=bl&ots=TbHb8PdOUb&sig=ACfU3U0fl1W--c6HqaU7fTzZo6GTA1pBOg&hl=fr&sa=X&ved=2ahUKEwja2PSLwPvnAhUcSxUIHSwdDFMQ6AEwA3oECAoQAQ#v=onepage&q=perspectiveTransform%20opencv%20homography%20augmented&f=false
+
 AR en python avec opencv, sift et homography
 https://bitesofcode.wordpress.com/2017/09/12/augmented-reality-with-python-and-opencv-part-1/
 
@@ -61,9 +66,5 @@ https://www.youtube.com/watch?v=B4pc_e8mdcs
 ## Conda
 
 [OpenCV](https://anaconda.org/conda-forge/opencv)
-`conda install -c conda-forge opencv `
+`conda install -c conda-forge opencv`
 
-[MatPlotLib](https://anaconda.org/conda-forge/matplotlib)
-`conda install -c conda-forge matplotlib `
-
-conda install -c conda-forge pyopengl  https://anaconda.org/conda-forge/pyopengl

@@ -2,7 +2,7 @@ import numpy as np
 import cv2 as cv
 import os
 import math
-from objloader_simple import *
+from objLoader import *
 
 _debug=False
 print('[INFO] Debug ARTools is : '+str(_debug))
@@ -57,11 +57,11 @@ class Renderer:
 
         return np.dot(self.cam.mtx, projection)
         
-    def DrawObjHomography(self,img, homography,obj):
+    def DrawObj(self,img, homography,obj,color=(255,255,255),line=True,eye=1):
         if homography is not None :
             projection=self.ComputeProjectionMatrix(homography)
             vertices = obj.vertices
-            scale_matrix = np.eye(3) * 3
+            scale_matrix = np.eye(3) * eye
             h = self.marker.img.shape[0]
             w = self.marker.img.shape[1]
 
@@ -74,7 +74,11 @@ class Renderer:
                 points = np.array([[p[0] + w / 2, p[1] + h / 2, p[2]] for p in points])
                 dst = cv.perspectiveTransform(points.reshape(-1, 1, 3), projection)
                 imgpts = np.int32(dst)
-                cv.fillConvexPoly(img, imgpts, (137, 27, 211))
+
+                if line == True :
+                    img = cv.polylines(img, [imgpts], True, color, 1, cv.LINE_AA)
+                else :
+                    cv.fillConvexPoly(img, imgpts, (0, 0, 255),lineType=4)
 
         return img
 
@@ -107,8 +111,9 @@ class Renderer:
             pts = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
             # project corners into frame
             dst = cv.perspectiveTransform(pts, homography)
+            imgpts=np.int32(dst)
             # connect them with lines  
-            frame = cv.polylines(frame, [np.int32(dst)], True, color, 3, cv.LINE_AA)
+            frame = cv.polylines(frame, [imgpts], True, color, 3, cv.LINE_AA)
 
         return frame  
 
@@ -131,35 +136,10 @@ class Renderer:
 
         return frame
 
-    def Draw3DCubeTest(self,img, rvecs, tvecs):
+    def Draw3DCubeTest(self,img):
         frame=img.copy()
-        if rvecs is not None and tvecs is not None :
-            # Cube corner points in world coordinates
-            axis = np.float32([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, -1], [1, 0, -1], [1, 1, -1],
-                                [0, 1, -1]]).reshape(-1, 3)
 
-            # Project corner points of the cube in image frame
-            imgpts, _ = cv.projectPoints(axis, rvecs, tvecs, self.cam.mtx, self.cam.dist)
-
-            # Render cube in the video
-            # Two faces (top and bottom are shown. They are connected by red lines.
-            imgpts = np.int32(imgpts).reshape(-1, 2)
-            face1 = imgpts[:4]
-            face2 = np.array([imgpts[0], imgpts[1], imgpts[5], imgpts[4]])
-            face3 = np.array([imgpts[2], imgpts[3], imgpts[7], imgpts[6]])
-            face4 = imgpts[4:]
-
-            # Bottom face
-            frame = cv.drawContours(img, [face1], -1, (255, 0, 0), -3)
-
-            # Draw lines connected the two faces
-            frame = cv.line(img, tuple(imgpts[0]), tuple(imgpts[4]), (0, 0, 255), 2)
-            frame = cv.line(img, tuple(imgpts[1]), tuple(imgpts[5]), (0, 0, 255), 2)
-            frame = cv.line(img, tuple(imgpts[2]), tuple(imgpts[6]), (0, 0, 255), 2)
-            frame = cv.line(img, tuple(imgpts[3]), tuple(imgpts[7]), (0, 0, 255), 2)
-
-            # Top face
-            frame = cv.drawContours(img, [face4], -1, (0, 255, 0), -3)
+        axis = np.float32([[0,0,0], [0,3,0], [3,3,0], [3,0,0],[0,0,-3],[0,3,-3],[3,3,-3],[3,0,-3] ])
 
         return frame
 
@@ -170,12 +150,13 @@ class ARPipeline:
         self.escapeKey=escapeKey
         self.cam.width=width
         self.cam.height=height
-        self.cam.video=video
+        self.cam.video=str(video)
         self.cam.loop=loop
         self.cam.realMode=realMode
         print('[INFO] Press \"'+str(self.escapeKey)+'\" to quit')
-
-        if video==0 :
+        
+        if str.isdigit(self.cam.video) :
+            video=int(self.cam.video)
             self.cam.capture = cv.VideoCapture(video,cv.CAP_DSHOW)
             print('[INFO] Video capture is \"camera\"')
         else :
@@ -186,7 +167,7 @@ class ARPipeline:
         
         self.cam.capture.set(cv.CAP_PROP_FRAME_WIDTH, self.cam.width)
         self.cam.capture.set(cv.CAP_PROP_FRAME_HEIGHT, self.cam.height)
-        self.descriptor = cv.ORB_create()
+        self.detector = cv.ORB_create()
         self.matcher= cv.BFMatcher() #https://docs.opencv.org/master/dc/dc3/tutorial_py_matcher.html
 
     def LoadCamCalibration(self,calibrationPath):
@@ -197,12 +178,14 @@ class ARPipeline:
     def LoadMarker(self,markerPath):
         # Extract marker features
         self.marker.img=cv.imread(markerPath,cv.IMREAD_COLOR)
-        self.marker.kp, self.marker.des = self.descriptor.detectAndCompute(cv.cvtColor(self.marker.img, cv.COLOR_BGR2GRAY), None)        
+        self.marker.kp, self.marker.des = self.detector.detectAndCompute(cv.cvtColor(self.marker.img, cv.COLOR_BGR2GRAY), None)        
         
         # Compute marker points
-        h_norm=self.cam.height/max(self.cam.height,self.cam.width)
-        w_norm=self.cam.width/max(self.cam.height,self.cam.width)
-        self.marker.points2D = np.float32([[0,0],[self.cam.width,0],[self.cam.width,self.cam.height],[0,self.cam.height]]).reshape(-1, 1, 2)
+        h=self.marker.img.shape[0]
+        w=self.marker.img.shape[1]
+        h_norm=h/max(h,w)
+        w_norm=w/max(h,w)
+        self.marker.points2D = np.float32([[0,0],[w,0],[w,h],[0,h]]).reshape(-1, 1, 2)
         self.marker.points3D = np.float32([[-w_norm,-h_norm,0],[w_norm,-h_norm,0],[w_norm,h_norm,0],[-w_norm,h_norm,0]])
         
         self.renderer=Renderer(self)
@@ -265,7 +248,7 @@ class ARPipeline:
         else:
             gray=frame
 
-        frame_kp, frame_des = self.descriptor.detectAndCompute(gray, None)
+        frame_kp, frame_des = self.detector.detectAndCompute(gray, None)
 
         if frame_des is not None and len(frame_kp)>=k:
             matches=self.matcher.knnMatch(self.marker.des,frame_des,k=k)
@@ -322,11 +305,11 @@ class ARPipeline:
     def ComputePose(self,frame,homography):
         rvecs=None
         tvecs=None
-        #@TODO NOK
+        #@TODO NOK a faire via les previous frames
         if homography is not None :
             # Transform frame edge based on new homography
             dst = cv.perspectiveTransform(self.marker.points2D, homography) 
-            # Estimate the camera pose from frame corner points in world coordinates and image frame
+            # Estimate the camera pose, objectPoints=3D points, imagePoints=2D points
             _,rvecs, tvecs = cv.solvePnP(objectPoints=self.marker.points3D, imagePoints=dst, cameraMatrix=self.cam.mtx, distCoeffs=self.cam.dist)
 
             #rotMat=cv.Rodrigues(rvecs)
@@ -334,3 +317,5 @@ class ARPipeline:
             Log('[Warning] Cannot compute pose without homography')  
 
         return rvecs, tvecs
+
+
