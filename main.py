@@ -72,6 +72,7 @@ def main():
         img_matches_refined = cv.resize(img_matches_refined,(frame.shape[1],frame.shape[0]))
         cv.imshow('Matches refined',img_matches_refined)
         cv.imshow('Warp',warped)
+        cv.waitKey()
 
         if moveWindows==True :
             # init position windows once
