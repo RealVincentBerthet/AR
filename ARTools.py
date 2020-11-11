@@ -1,19 +1,22 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""ARTools.py: ARTools AR pipeline step"""
+__author__      = 'Vincent Berthet'
+__license__     = 'MIT'
+__email__       = 'vincent.berthet42@gmail.com'
+__website__     = 'https://realvincentberthet.github.io/vberthet/'
+
 import numpy as np
 import cv2 as cv
 import os
 import math
-from objLoader import *
+import logging
+import logging.config
+from CameraOpenCV import Camera
 
-_debug=False
-print('[INFO] Debug ARTools is : '+str(_debug))
-
-def Log(message):
-     if _debug==True :
-        print(message)
-
-class Struct(object):
-    def __getattr__(self, name):
-        setattr(self, name, None)
+# Logging
+logging.config.fileConfig('logger.conf')
+log = logging.getLogger()
 
 class FrameTracking:
     def __init__(self,n=10,popTreshold=5):
@@ -45,22 +48,65 @@ class FrameTracking:
         for f in range(1,len(self.frames)) :
             res=res*f
 
-        #print(str(len(self.frames))+' : '+str(self.frames[0]-res))
         return res
 
     def Clear(self):
         self.frames=[]
 
+class OBJ:
+    def __init__(self, filename, swapyz=False):
+        """Loads a Wavefront OBJ file. """
+        self.vertices = []
+        self.normals = []
+        self.texcoords = []
+        self.faces = []
+ 
+        material = None
+        for line in open(filename, "r"):
+            if line.startswith('#'): continue
+            values = line.split()
+            if not values: continue
+            if values[0] == 'v':
+                v = list(map(float, values[1:4]))
+                if swapyz:
+                    v = v[0], v[2], v[1]
+                self.vertices.append(v)
+            elif values[0] == 'vn':
+                v = list(map(float, values[1:4]))
+                if swapyz:
+                    v = v[0], v[2], v[1]
+                self.normals.append(v)
+            elif values[0] == 'vt':
+                self.texcoords.append(list(map(float, values[1:3])))
+            # elif values[0] in ('usemtl', 'usemat'):
+            #     material = values[1]
+            # elif values[0] == 'mtllib':
+            #     self.mtl = MTL(values[1])
+            elif values[0] == 'f':
+                face = []
+                texcoords = []
+                norms = []
+                for v in values[1:]:
+                    w = v.split('/')
+                    face.append(int(w[0]))
+                    if len(w) >= 2 and len(w[1]) > 0:
+                        texcoords.append(int(w[1]))
+                    else:
+                        texcoords.append(0)
+                    if len(w) >= 3 and len(w[2]) > 0:
+                        norms.append(int(w[2]))
+                    else:
+                        norms.append(0)
+                self.faces.append((face, norms, texcoords, material))
+
 class Renderer:
     def __init__(self,pipeline):
         self.pipeline=pipeline
-        self.cam=pipeline.cam
-        self.marker=pipeline.marker
     
     def ComputeProjectionMatrix(self,homography):
         # Compute rotation along the x and y axis as well as the translation
         homography = homography * (-1)
-        rot_and_transl = np.dot(np.linalg.inv(self.cam.mtx), homography)
+        rot_and_transl = np.dot(np.linalg.inv(self.pipeline.CAP.mtx), homography)
         col_1 = rot_and_transl[:, 0]
         col_2 = rot_and_transl[:, 1]
         col_3 = rot_and_transl[:, 2]
@@ -79,14 +125,13 @@ class Renderer:
         # finally, compute the 3D projection matrix from the model to the current frame
         projection = np.stack((rot_1, rot_2, rot_3, translation)).T
 
-        return np.dot(self.cam.mtx, projection)
+        return np.dot(self.pipeline.CAP.mtx, projection)
         
     def DrawObj(self,img, homography,obj,color=(255,255,255),line=True,eye=1):
         if homography is not None :
             self.pipeline.tracker.Add(homography)
         else :
             self.pipeline.tracker.Pop()
-
         homography=self.pipeline.tracker.Mean()
         if homography is None :
             return img
@@ -94,8 +139,8 @@ class Renderer:
         projection=self.ComputeProjectionMatrix(homography)
         vertices = obj.vertices
         scale_matrix = np.eye(3) * eye
-        h = self.marker.img.shape[0]
-        w = self.marker.img.shape[1]
+        h = self.pipeline.marker_image.shape[0]
+        w = self.pipeline.marker_image.shape[1]
 
         for face in obj.faces:
             face_vertices = face[0]
@@ -123,23 +168,23 @@ class Renderer:
         return tmp
 
     def DrawMatches(self,img,img_kp,matches,maxMatches=None):
-        keypoints=self.DrawKeypoints(self.marker.img,self.marker.kp)
+        keypoints=self.DrawKeypoints(self.pipeline.marker_image,self.pipeline.marker_kp)
         if matches is None :
-            tmp=cv.drawMatchesKnn(keypoints,self.marker.kp,img,img_kp,None,None,flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+            tmp=cv.drawMatchesKnn(keypoints,self.pipeline.marker_kp,img,img_kp,None,None,flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
         else:
             if maxMatches == None or maxMatches>len(matches)-1:
                 maxMatches=len(matches)-1
                 if maxMatches < 0 :
                     maxMatches=0
-            tmp=cv.drawMatchesKnn(keypoints,self.marker.kp,img,img_kp,matches[:maxMatches],None,flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+            tmp=cv.drawMatchesKnn(keypoints,self.pipeline.marker_kp,img,img_kp,matches[:maxMatches],None,flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
         return tmp
 
     def Draw2DRectangle(self,img,homography,color=(255,0,0)):
         frame=img.copy()
         if homography is not None :
             # Draw a rectangle that marks the found model in the frame
-            h=self.marker.img.shape[0]
-            w=self.marker.img.shape[1]
+            h=self.pipeline.marker_image.shape[0]
+            w=self.pipeline.marker_image.shape[1]
             pts = np.float32([[0, 0], [0, h - 1], [w - 1, h - 1], [w - 1, 0]]).reshape(-1, 1, 2)
             # project corners into frame
             dst = cv.perspectiveTransform(pts, homography)
@@ -154,7 +199,7 @@ class Renderer:
         if rvecs is not None and tvecs is not None :
             axis = np.float32([[0,0,0], [0,1,0], [1,1,0], [1,0,0],[0,0,-1],[0,1,-1],[1,1,-1],[1,0,-1] ])
             # project 3D points to image plane
-            imgpts, _ = cv.projectPoints(axis, rvecs, tvecs, self.cam.mtx, self.cam.dist)
+            imgpts, _ = cv.projectPoints(axis, rvecs, tvecs, self.pipeline.CAP.mtx, self.pipeline.CAP.dist)
 
             imgpts = np.int32(imgpts).reshape(-1,2)
 
@@ -168,109 +213,36 @@ class Renderer:
 
         return frame
 
-    def Draw3DCubeTest(self,img):
-        frame=img.copy()
-
-        axis = np.float32([[0,0,0], [0,3,0], [3,3,0], [3,0,0],[0,0,-3],[0,3,-3],[3,3,-3],[3,0,-3] ])
-
-        return frame
-
 class ARPipeline:
-    def __init__(self,escapeKey='q',width=640,height=480,video=0,loop=True,realMode=False):
-        self.cam=Struct()
-        self.marker=Struct()
-        self.tracker=FrameTracking()
-        self.escapeKey=escapeKey
-        self.cam.width=width
-        self.cam.height=height
-        self.cam.video=str(video)
-        self.cam.loop=loop
-        self.cam.realMode=realMode
-        print('[INFO] Press \"'+str(self.escapeKey)+'\" to quit')
-        
-        if str.isdigit(self.cam.video) :
-            video=int(self.cam.video)
-            self.cam.capture = cv.VideoCapture(video,cv.CAP_DSHOW)
-            print('[INFO] Video capture is \"camera\"')
-        else :
-            self.cam.capture = cv.VideoCapture(video)
-            self.cam.video=video
-
-            print('[INFO] Video capture is \"'+str(video)+'\", '+str(int(self.cam.capture.get(cv.CAP_PROP_FPS)))+' FPS')
-        
-        self.cam.capture.set(cv.CAP_PROP_FRAME_WIDTH, self.cam.width)
-        self.cam.capture.set(cv.CAP_PROP_FRAME_HEIGHT, self.cam.height)
+    def __init__(self,capture=0,width=640,height=480,calibration=None):
+        self.CAP=Camera(capture,calibration,(width,height))
         self.detector = cv.ORB_create()
         self.matcher= cv.BFMatcher() #https://docs.opencv.org/master/dc/dc3/tutorial_py_matcher.html
-
-    def LoadCamCalibration(self,calibrationPath):
-        with np.load(str(calibrationPath)) as X:
-            self.cam.mtx, self.cam.dist, _, _ = [X[i] for i in ('mtx','dist','rvecs','tvecs')]
-        print('[INFO] Calibration file used is \"'+str(calibrationPath)+'\"')
+        self.tracker=FrameTracking()
+        self.marker_image=None
+        self.marker_kp=None
+        self.marker_des=None
+        self.marker_points2D=None
+        self.marker_points3D=None
     
-    def LoadMarker(self,markerPath):
+    def LoadMarker(self,marker_path):
         # Extract marker features
-        self.marker.img=cv.imread(markerPath,cv.IMREAD_COLOR)
-        self.marker.kp, self.marker.des = self.detector.detectAndCompute(cv.cvtColor(self.marker.img, cv.COLOR_BGR2GRAY), None)        
+        self.marker_image=cv.imread(marker_path,cv.IMREAD_COLOR)
+        self.marker_kp, self.marker_des = self.detector.detectAndCompute(cv.cvtColor(self.marker_image, cv.COLOR_BGR2GRAY), None)        
         
         # Compute marker points
-        h=self.marker.img.shape[0]
-        w=self.marker.img.shape[1]
+        h=self.marker_image.shape[0]
+        w=self.marker_image.shape[1]
         h_norm=h/max(h,w)
         w_norm=w/max(h,w)
-        self.marker.points2D = np.float32([[0,0],[w,0],[w,h],[0,h]]).reshape(-1, 1, 2)
-        self.marker.points3D = np.float32([[-w_norm,-h_norm,0],[w_norm,-h_norm,0],[w_norm,h_norm,0],[-w_norm,h_norm,0]])
+        self.marker_points2D = np.float32([[0,0],[w,0],[w,h],[0,h]]).reshape(-1, 1, 2)
+        self.marker_points3D = np.float32([[-w_norm,-h_norm,0],[w_norm,-h_norm,0],[w_norm,h_norm,0],[-w_norm,h_norm,0]])
         
         self.renderer=Renderer(self)
-        print('[INFO] Marker used is \"'+str(markerPath)+'\"')
+        log.info('Marker used is \"'+str(marker_path)+'\"')
     
     def GetFrame(self):
-        # Capture frame-by-frame
-        if self.cam.capture.isOpened() :
-            ret, frame = self.cam.capture.read()
-
-            if self.cam.video !=0 :
-                # Video from file
-                if not(self.cam.realMode==True) :
-                    for i in range(int(self.cam.capture.get(cv.CAP_PROP_FPS))) :
-                        if  cv.waitKey(1) & 0xFF == ord(str(self.escapeKey)):
-                            # Stop with key
-                            self.cam.capture.release()
-                            cv.destroyAllWindows()
-                            quit()
-
-                if not ret :
-                    if self.cam.loop==True :
-                        self.cam.capture.set(cv.CAP_PROP_POS_FRAMES, 0)
-                        return self.GetFrame()
-                    else :
-                        # End of video file
-                        self.cam.capture.release()
-                        cv.destroyAllWindows()
-                        quit()
-                else:
-                    # resize video frame
-                    frame = cv.resize(frame,(self.cam.width,self.cam.height))
-            else :
-                # Video from camera check return
-                if not ret :
-                    print('[ERROR] Unable to capture video')
-                    self.cam.capture.release()
-                    cv.destroyAllWindows()
-                    quit()    
-
-            if  cv.waitKey(1) & 0xFF == ord(str(self.escapeKey)):
-                # Stop with key
-                self.cam.capture.release()
-                cv.destroyAllWindows()
-                quit()
-        else :
-            print('[ERROR] Unable to capture video source')
-            self.cam.capture.release()
-            cv.destroyAllWindows()
-            quit()
-
-        return frame
+        return self.CAP.getFrame()
     
     def ComputeMatches(self,frame):
         good_matches = []
@@ -284,13 +256,13 @@ class ARPipeline:
         frame_kp, frame_des = self.detector.detectAndCompute(gray, None)
 
         if frame_des is not None and len(frame_kp)>=k:
-            matches=self.matcher.knnMatch(self.marker.des,frame_des,k=k)
+            matches=self.matcher.knnMatch(self.marker_des,frame_des,k=k)
             # Ratio test
             for m,n in matches:
                 if m.distance < 0.75*n.distance:
                     good_matches.append([m])
         else:
-            Log('[Warning] Not enough descriptors found in the frame')
+            log.debug('Not enough descriptors found in the frame ('+str(len(frame_kp))+' found at least '+str(k)+' are required)')
 
         return good_matches,frame_kp
 
@@ -299,11 +271,11 @@ class ARPipeline:
         mask=None
         
         if len(matches) >minMatches :      
-            src_points = np.float32([self.marker.kp[m[0].queryIdx].pt for m in matches]).reshape(-1,1,2)
+            src_points = np.float32([self.marker_kp[m[0].queryIdx].pt for m in matches]).reshape(-1,1,2)
             dst_points = np.float32([frame_kp[m[0].trainIdx].pt for m in matches]).reshape(-1,1,2)
             homography, mask=cv.findHomography(src_points,dst_points,cv.RANSAC,ransacReprojThreshold=5.0)
         else :
-            Log('[Warning] Cannot compute homography without enough matches')
+            log.debug('Cannot compute homography without enough matches ('+str(len(matches))+' found at least '+str(minMatches)+' are required)')
 
         return homography,mask
     
@@ -323,7 +295,7 @@ class ARPipeline:
 
         if homography is not None :
             #Applies a perspective transformation to warp image using homography found
-            warped=cv.warpPerspective(cv.cvtColor(self.marker.img, cv.COLOR_BGR2GRAY),homography,(frame.shape[1],frame.shape[0]),cv.WARP_INVERSE_MAP | cv.INTER_CUBIC)
+            warped=cv.warpPerspective(cv.cvtColor(self.marker_image, cv.COLOR_BGR2GRAY),homography,(frame.shape[1],frame.shape[0]),cv.WARP_INVERSE_MAP | cv.INTER_CUBIC)
             warped_matches,warped_kp=self.ComputeMatches(warped)
             warped_correct_matches=self.RefineMatches(warped_matches,warped_kp,minMatches=minMatches)
            
@@ -338,16 +310,16 @@ class ARPipeline:
     def ComputePose(self,frame,homography):
         rvecs=None
         tvecs=None
-        #@TODO NOK a faire via les previous frames
+        
         if homography is not None :
             # Transform frame edge based on new homography
-            dst = cv.perspectiveTransform(self.marker.points2D, homography) 
+            dst = cv.perspectiveTransform(self.marker_points2D, homography) 
             # Estimate the camera pose, objectPoints=3D points, imagePoints=2D points
-            _,rvecs, tvecs = cv.solvePnP(objectPoints=self.marker.points3D, imagePoints=dst, cameraMatrix=self.cam.mtx, distCoeffs=self.cam.dist)
+            _,rvecs, tvecs = cv.solvePnP(objectPoints=self.marker_points3D, imagePoints=dst, cameraMatrix=self.CAP.mtx, distCoeffs=self.CAP.dist)
 
             #rotMat=cv.Rodrigues(rvecs)
         else :
-            Log('[Warning] Cannot compute pose without homography')  
+            log.debug('Cannot compute pose without homography')  
 
         return rvecs, tvecs
 
