@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""ARTools.py: ARTools AR pipeline step"""
+"""ARTools.py: ARTools AR pipeline step and rendering"""
 __author__      = 'Vincent Berthet'
 __license__     = 'MIT'
 __email__       = 'vincent.berthet42@gmail.com'
@@ -101,9 +101,15 @@ class OBJ:
 
 class Renderer:
     def __init__(self,pipeline):
+        """ Use to render pipeline"""
         self.pipeline=pipeline
     
-    def ComputeProjectionMatrix(self,homography):
+    def computeProjectionMatrix(self,homography):
+        """
+        computeProjectionMatrix Method compute projection matrix
+        :param homography: homography provided to compute projection matrix
+        :return: projection matrix
+        """
         # Compute rotation along the x and y axis as well as the translation
         homography = homography * (-1)
         rot_and_transl = np.dot(np.linalg.inv(self.pipeline.CAP.mtx), homography)
@@ -127,7 +133,19 @@ class Renderer:
 
         return np.dot(self.pipeline.CAP.mtx, projection)
         
-    def DrawObj(self,img, homography,obj,color=(255,255,255),line=True,eye=1):
+    def drawObj(self,img, homography,obj,color=(255,255,255),line=True,eye=1):
+        """
+        drawObj Method render obj object on a image
+
+        :param img: input image
+        :param homography: homography computed
+        :param obj: obj to render
+        :param obj: obj to render
+        :param color: color use to render obj
+        :param line: type of drawing for polyline
+        :param eye: scale
+        :return: image with obj drawn
+        """
         if homography is not None :
             self.pipeline.tracker.Add(homography)
         else :
@@ -136,12 +154,13 @@ class Renderer:
         if homography is None :
             return img
 
-        projection=self.ComputeProjectionMatrix(homography)
+        projection=self.computeProjectionMatrix(homography)
         vertices = obj.vertices
         scale_matrix = np.eye(3) * eye
         h = self.pipeline.marker_image.shape[0]
         w = self.pipeline.marker_image.shape[1]
 
+        image=img.copy()
         for face in obj.faces:
             face_vertices = face[0]
             points = np.array([vertices[vertex - 1] for vertex in face_vertices])
@@ -153,13 +172,21 @@ class Renderer:
             imgpts = np.int32(dst)
 
             if line == True :
-                img = cv.polylines(img, [imgpts], True, color, 1, cv.LINE_AA)
+                image = cv.polylines(image, [imgpts], True, color, 1, cv.LINE_AA)
             else :
-                cv.fillConvexPoly(img, imgpts, (0, 0, 255),lineType=4)
+                cv.fillConvexPoly(image, imgpts, (0, 0, 255),lineType=4)
 
-        return img
+        return image
 
-    def DrawKeypoints(self,img,keypoints):
+    def drawKeypoints(self,img,keypoints):
+        """
+        drawKeypoints Method render keypoints on a image
+
+        :param img: input image
+        :param keypoints: keypoints object list
+        :param obj: obj to render
+        :return: image with keypoints
+        """
         tmp=img.copy()
         cv.drawKeypoints(img,keypoints,tmp ,color=(0,255,0), flags=0)
         size=(int(img.shape[1]),int(img.shape[0]))
@@ -167,8 +194,17 @@ class Renderer:
 
         return tmp
 
-    def DrawMatches(self,img,img_kp,matches,maxMatches=None):
-        keypoints=self.DrawKeypoints(self.pipeline.marker_image,self.pipeline.marker_kp)
+    def drawMatches(self,img,img_kp,matches,maxMatches=None):
+        """
+        drawMatches Method render matches on a image
+
+        :param img: input image
+        :param img_kp: keypoints of the image
+        :param matches: matches found
+        :param maxMatches: maximum amount of matches 
+        :return: image with matches
+        """
+        keypoints=self.drawKeypoints(self.pipeline.marker_image,self.pipeline.marker_kp)
         if matches is None :
             tmp=cv.drawMatchesKnn(keypoints,self.pipeline.marker_kp,img,img_kp,None,None,flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
         else:
@@ -179,7 +215,15 @@ class Renderer:
             tmp=cv.drawMatchesKnn(keypoints,self.pipeline.marker_kp,img,img_kp,matches[:maxMatches],None,flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
         return tmp
 
-    def Draw2DRectangle(self,img,homography,color=(255,0,0)):
+    def draw2DRectangle(self,img,homography,color=(255,0,0)):
+        """
+        draw2DRectangle Method render a 2D rectangle
+
+        :param img: input image
+        :param homography: homography computed
+        :param color: color of the line
+        :return: image with 2D rectangle drawn
+        """
         frame=img.copy()
         if homography is not None :
             # Draw a rectangle that marks the found model in the frame
@@ -194,7 +238,15 @@ class Renderer:
 
         return frame  
 
-    def Draw3DCube(self,img, rvecs,tvecs):
+    def draw3DCube(self,img, rvecs,tvecs):
+        """
+        draw3DCube Method render a 3D  cube
+
+        :param img: input image
+        :param rvecs: computed from pnp
+        :param tvecs: computed from pnp
+        :return: image with 3D cube drawn
+        """
         frame=img.copy()
         if rvecs is not None and tvecs is not None :
             axis = np.float32([[0,0,0], [0,1,0], [1,1,0], [1,0,0],[0,0,-1],[0,1,-1],[1,1,-1],[1,0,-1] ])
@@ -214,10 +266,20 @@ class Renderer:
         return frame
 
 class ARPipeline:
-    def __init__(self,capture=0,width=640,height=480,calibration=None):
+    def __init__(self,capture=0,width=640,height=480,calibration=None,detector=cv.ORB_create(),matcher=cv.BFMatcher(normType=cv.NORM_HAMMING)):
+        """
+        ARPipeline class use to manage pipeline to process pose estimation
+
+        :param capture: Capture use, it can be camera index of your device (0 for first webcam) or video path
+        :param width: width set for the capture resolution (set if available on the device)
+        :param height: heigjt set for the capture resolution (set if available on the device)
+        :param calibration:  calibration file
+        :param detector: detector used by the pipeline [ORB, SIFT, AKAZE]
+        :param matcher: matcher used by the pipeline [HAMMING, L2,FLANN]
+        """
         self.CAP=Camera(capture,calibration,(width,height))
-        self.detector = cv.ORB_create()
-        self.matcher= cv.BFMatcher() #https://docs.opencv.org/master/dc/dc3/tutorial_py_matcher.html
+        self.detector=detector
+        self.matcher=matcher #https://docs.opencv.org/master/dc/dc3/tutorial_py_matcher.html
         self.tracker=FrameTracking()
         self.marker_image=None
         self.marker_kp=None
@@ -225,7 +287,12 @@ class ARPipeline:
         self.marker_points2D=None
         self.marker_points3D=None
     
-    def LoadMarker(self,marker_path):
+    def loadMarker(self,marker_path):
+        """
+        loadMarker Method load natural marker to use
+
+        :param marker_path: path to the natural marker used (.png/.jpg)
+        """
         # Extract marker features
         self.marker_image=cv.imread(marker_path,cv.IMREAD_COLOR)
         self.marker_kp, self.marker_des = self.detector.detectAndCompute(cv.cvtColor(self.marker_image, cv.COLOR_BGR2GRAY), None)        
@@ -241,10 +308,20 @@ class ARPipeline:
         self.renderer=Renderer(self)
         log.info('Marker used is \"'+str(marker_path)+'\"')
     
-    def GetFrame(self):
+    def getFrame(self):
+        """
+        getFrame Method get next frame from the capture
+
+        :return: next frame
+        """
         return self.CAP.getFrame()
     
-    def ComputeMatches(self,frame):
+    def computeMatches(self,frame):
+        """
+        computeMatches Method compute matches on a frame
+
+        :return: good matches and frames keypoints
+        """
         good_matches = []
         k=2
 
@@ -254,9 +331,11 @@ class ARPipeline:
             gray=frame
 
         frame_kp, frame_des = self.detector.detectAndCompute(gray, None)
-
         if frame_des is not None and len(frame_kp)>=k:
-            matches=self.matcher.knnMatch(self.marker_des,frame_des,k=k)
+            if type(self.matcher)==cv.FlannBasedMatcher :
+                matches=self.matcher.knnMatch(np.asarray(self.marker_des,np.float32),np.asarray(frame_des,np.float32),k=k) # CV32_F
+            else :
+                matches=self.matcher.knnMatch(self.marker_des,frame_des,k=k)
             # Ratio test
             for m,n in matches:
                 if m.distance < 0.75*n.distance:
@@ -266,7 +345,14 @@ class ARPipeline:
 
         return good_matches,frame_kp
 
-    def ComputeHomography(self,matches,frame_kp,minMatches=10):
+    def computeHomography(self,matches,frame_kp,minMatches=10):
+        """
+        computeHomography Method compute homography given matches and descriptor of the frame
+        :param matches: frame matches
+        :param frame_kp: frame keypoints
+        :param minMatches: minimum amount of matches requested
+        :return: the homograpy and mask computed
+        """
         homography=None
         mask=None
         
@@ -279,9 +365,15 @@ class ARPipeline:
 
         return homography,mask
     
-    def RefineMatches(self,matches,frame_kp,minMatches=10):
+    def refineMatches(self,matches,frame_kp,minMatches=10):
+        """
+        refineMatches Method refine matches by applying a mask to remove outliers
+        :param matches: frame matches
+        :param minMatches: minimum amount of matches requested
+        :return: the correct matches found
+        """
         correct_matches=[]
-        homography,mask=self.ComputeHomography(matches,frame_kp,minMatches=minMatches)
+        homography,mask=self.computeHomography(matches,frame_kp,minMatches=minMatches)
         
         if homography is not None :
             # Get inliers mask
@@ -289,25 +381,38 @@ class ARPipeline:
 
         return correct_matches
     
-    def WarpMarker(self,frame,homography,minMatches=10):
+    def warpMarker(self,frame,homography,minMatches=10):
+        """
+        warpMarker Method warp marker and refine homography
+        :param frame: frame
+        :param homography: homography computed
+        :param minMatches: minimum amount of matches requested
+        :return: warp perspective and homography refined
+        """
         warped=np.zeros((frame.shape[0],frame.shape[1]))
         homography_res=homography
 
         if homography is not None :
             #Applies a perspective transformation to warp image using homography found
             warped=cv.warpPerspective(cv.cvtColor(self.marker_image, cv.COLOR_BGR2GRAY),homography,(frame.shape[1],frame.shape[0]),cv.WARP_INVERSE_MAP | cv.INTER_CUBIC)
-            warped_matches,warped_kp=self.ComputeMatches(warped)
-            warped_correct_matches=self.RefineMatches(warped_matches,warped_kp,minMatches=minMatches)
+            warped_matches,warped_kp=self.computeMatches(warped)
+            warped_correct_matches=self.refineMatches(warped_matches,warped_kp,minMatches=minMatches)
            
             if len(warped_correct_matches)>0 :
-                homography_warped,_=self.ComputeHomography(warped_correct_matches,warped_kp,minMatches=minMatches)
+                homography_warped,_=self.computeHomography(warped_correct_matches,warped_kp,minMatches=minMatches)
                 
                 if homography_warped is not None :
                     homography_res=homography_warped
 
         return warped,homography_res
 
-    def ComputePose(self,frame,homography):
+    def computePose(self,frame,homography):
+        """
+        computePose Method compute pose according to pnp
+        :param frame: frame
+        :param homography: homography computed
+        :return: results of pnp
+        """
         rvecs=None
         tvecs=None
         

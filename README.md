@@ -6,9 +6,11 @@
 
 This project aimed to learn the basics of pose estimation for augmented reality. It relies on OpenCV library to process frame and computes pose estimation.
 
-*[Youtube demo](https://youtu.be/HUaX9xxEagU)*
+*[Youtube demo (ORB)](https://youtu.be/HUaX9xxEagU)*
+
 [![Watch the video](./demo.gif)](https://youtu.be/HUaX9xxEagU)
 
+*Natural marker*
 ![Pipeline](./pipeline.png)
 
 ## Packages
@@ -31,10 +33,12 @@ This project aimed to learn the basics of pose estimation for augmented reality.
     * `-max, --maxMatches` : Max matches
     * `--all` : Show any step of the pipeline
     * `--unmove` : Don't move position of windows as start
+    * `--detector` : Choose detector [ORB, SIFT, AKAZE] by default AKAZE
+    * `--matcher` : Choose matcher [HAMMING, L2,FLANN] by default HAMMING
     * `--log` : Choose logging level [DEBUG, INFO, WARNING, ERROR, CRITICAL]
 
 * [CameraOpenCV.py](./CameraOpenCV.py), script use to manage OpenCV camera object
 
 
 ### Run 
-`python main.py --source 0 --all`
+`python main.py --source 0 --all --detector=ORB --matcher=HAMMING --log=INFO`
